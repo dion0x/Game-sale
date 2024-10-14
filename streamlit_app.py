@@ -1,66 +1,46 @@
-import altair as alt
-import pandas as pd
 import streamlit as st
+import pandas as pd
 
-# Show the page title and description.
-st.set_page_config(page_title="Movies dataset", page_icon="🎬")
-st.title("🎬 Movies dataset")
-st.write(
-    """
-    This app visualizes data from [The Movie Database (TMDB)](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata).
-    It shows which movie genre performed best at the box office over the years. Just 
-    click on the widgets below to explore!
-    """
-)
+# Load the CSV file from the current directory
+file_path = 'vgchartz-2024 (1).csv'  # Use the correct relative path
+game_sales_data = pd.read_csv(file_path, on_bad_lines='skip')  # Skip bad lines
 
+# Page Title
+st.title("Video Game Sales Dashboard")
 
-# Load the data from a CSV. We're caching this so it doesn't reload every time the app
-# reruns (e.g. if the user interacts with the widgets).
-@st.cache_data
-def load_data():
-    df = pd.read_csv("data/movies_genres_summary.csv")
-    return df
+# Display Dataset
+st.subheader("Dataset Overview")
+st.write(game_sales_data.head())
 
+# Filter games by console, genre, or publisher
+console_options = game_sales_data['console'].unique().tolist()
+genre_options = game_sales_data['genre'].unique().tolist()
+publisher_options = game_sales_data['publisher'].unique().tolist()
 
-df = load_data()
+# Set default values to an empty list for no selections
+console_filter = st.multiselect("Select Console", console_options, default=[])
+genre_filter = st.multiselect("Select Genre", genre_options, default=[])
+publisher_filter = st.multiselect("Select Publisher", publisher_options, default=[])
 
-# Show a multiselect widget with the genres using `st.multiselect`.
-genres = st.multiselect(
-    "Genres",
-    df.genre.unique(),
-    ["Action", "Adventure", "Biography", "Comedy", "Drama", "Horror"],
-)
+# Apply filters to the dataset
+filtered_data = game_sales_data[
+    (game_sales_data['console'].isin(console_filter) | (len(console_filter) == 0)) &
+    (game_sales_data['genre'].isin(genre_filter) | (len(genre_filter) == 0)) &
+    (game_sales_data['publisher'].isin(publisher_filter) | (len(publisher_filter) == 0))
+]
 
-# Show a slider widget with the years using `st.slider`.
-years = st.slider("Years", 1986, 2006, (2000, 2016))
+# Display filtered data
+st.subheader("Filtered Games")
+st.write(filtered_data)
 
-# Filter the dataframe based on the widget input and reshape it.
-df_filtered = df[(df["genre"].isin(genres)) & (df["year"].between(years[0], years[1]))]
-df_reshaped = df_filtered.pivot_table(
-    index="year", columns="genre", values="gross", aggfunc="sum", fill_value=0
-)
-df_reshaped = df_reshaped.sort_values(by="year", ascending=False)
+# Sales distribution across regions
+st.subheader("Sales Distribution(In Million)")
+region_sales = filtered_data[['North American sales', 'Japan sales', 'North American sales', 'other_sales']].sum()
 
+# Streamlit's built-in bar chart
+st.bar_chart(region_sales)
 
-# Display the data as a table using `st.dataframe`.
-st.dataframe(
-    df_reshaped,
-    use_container_width=True,
-    column_config={"year": st.column_config.TextColumn("Year")},
-)
-
-# Display the data as an Altair chart using `st.altair_chart`.
-df_chart = pd.melt(
-    df_reshaped.reset_index(), id_vars="year", var_name="genre", value_name="gross"
-)
-chart = (
-    alt.Chart(df_chart)
-    .mark_line()
-    .encode(
-        x=alt.X("year:N", title="Year"),
-        y=alt.Y("gross:Q", title="Gross earnings ($)"),
-        color="genre:N",
-    )
-    .properties(height=320)
-)
-st.altair_chart(chart, use_container_width=True)
+# Display top 10 games by total sales
+st.subheader("Top 10 Games by Total Sales")
+top_games = filtered_data.nlargest(10, 'total_sales')
+st.write(top_games[['title', 'total_sales']])
